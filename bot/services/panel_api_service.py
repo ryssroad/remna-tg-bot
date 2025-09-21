@@ -343,10 +343,35 @@ class PanelApiService:
             status: str = "ACTIVE",
             log_response: bool = True) -> Optional[Dict[str, Any]]:
 
-        if not (6 <= len(username_on_panel) <= 34 and
-                username_on_panel.replace('_', '').replace('-', '').isalnum()):
-            if not (username_on_panel.startswith("tg_")
-                    and username_on_panel.split("tg_")[-1].isdigit()):
+        # Check basic length and character requirements first
+        if not (6 <= len(username_on_panel) <= 34):
+            msg = f"Panel username '{username_on_panel}' length must be between 6 and 34 characters."
+            logging.error(msg)
+            return {
+                "error": True,
+                "status_code": 400,
+                "error_message": msg,
+                "error_code": "INVALID_USERNAME_LENGTH"
+            }
+
+        # Check if username contains only valid characters (alphanumeric, underscore, hyphen)
+        if not username_on_panel.replace('_', '').replace('-', '').isalnum():
+            msg = f"Panel username '{username_on_panel}' contains invalid characters."
+            logging.error(msg)
+            return {
+                "error": True,
+                "status_code": 400,
+                "error_message": msg,
+                "error_code": "INVALID_USERNAME_CHARS"
+            }
+
+        # Allow both formats: tg_userId and userName_userId
+        is_valid_tg_format = (username_on_panel.startswith("tg_")
+                            and username_on_panel.split("tg_")[-1].isdigit())
+        is_valid_username_format = ('_' in username_on_panel
+                                  and username_on_panel.split('_')[-1].isdigit())
+
+        if not (is_valid_tg_format or is_valid_username_format):
                 msg = f"Panel username '{username_on_panel}' does not meet panel requirements."
                 logging.error(msg)
                 return {
@@ -468,8 +493,22 @@ class PanelApiService:
     async def get_bot_db_last_sync_status(
             self, session: AsyncSession) -> Optional[PanelSyncStatus]:
         return await panel_sync_dal.get_panel_sync_status(session)
-    
-    
+
+    async def delete_user_by_uuid(self, user_uuid: str) -> bool:
+        """Delete user from panel by UUID"""
+        try:
+            response_data = await self._request("DELETE", f"/users/{user_uuid}")
+            if response_data and not response_data.get("error"):
+                logging.info(f"User {user_uuid} deleted from panel successfully")
+                return True
+            else:
+                logging.error(f"Failed to delete user {user_uuid} from panel: {response_data}")
+                return False
+        except Exception as e:
+            logging.error(f"Error deleting user {user_uuid} from panel: {e}")
+            return False
+
+
     async def get_system_stats(self) -> Optional[Dict[str, Any]]:
         """Get system statistics (CPU, memory, users counts)"""
         response_data = await self._request("GET", "/system/stats", log_full_response=False)
@@ -490,3 +529,113 @@ class PanelApiService:
         if response_data and not response_data.get("error") and "response" in response_data:
             return response_data.get("response")
         return None
+
+    async def migrate_user_to_new_username_format(self, panel_uuid: str, old_username: str, new_username: str,
+                                                   dry_run: bool = True) -> Dict[str, Any]:
+        """
+        Safely migrate a user from old format (tg_userId) to new format (userName_userId).
+
+        Args:
+            panel_uuid: Panel user UUID
+            old_username: Current username (e.g., "tg_123456")
+            new_username: New username (e.g., "john_doe_123456")
+            dry_run: If True, only check if migration is possible without making changes
+
+        Returns:
+            Dict with migration status and details
+        """
+        result = {
+            "success": False,
+            "dry_run": dry_run,
+            "old_username": old_username,
+            "new_username": new_username,
+            "panel_uuid": panel_uuid,
+            "error": None,
+            "checks": {
+                "user_exists": False,
+                "username_available": False,
+                "format_valid": False,
+                "safe_to_migrate": False
+            }
+        }
+
+        try:
+            # 1. Verify user exists by UUID
+            user_data = await self.get_user_by_uuid(panel_uuid)
+            if not user_data:
+                result["error"] = f"User with UUID {panel_uuid} not found on panel"
+                return result
+
+            result["checks"]["user_exists"] = True
+            current_panel_username = user_data.get("username", "")
+
+            # 2. Verify current username matches expected old username
+            if current_panel_username != old_username:
+                result["error"] = f"Current username '{current_panel_username}' does not match expected '{old_username}'"
+                return result
+
+            # 3. Validate new username format
+            if not new_username or len(new_username) < 6 or len(new_username) > 34:
+                result["error"] = f"New username '{new_username}' does not meet length requirements (6-34 chars)"
+                return result
+
+            if not new_username.replace('_', '').replace('-', '').isalnum():
+                result["error"] = f"New username '{new_username}' contains invalid characters"
+                return result
+
+            # Check if it ends with _userId format
+            if '_' not in new_username or not new_username.split('_')[-1].isdigit():
+                result["error"] = f"New username '{new_username}' does not follow userName_userId format"
+                return result
+
+            result["checks"]["format_valid"] = True
+
+            # 4. Check if new username is available
+            try:
+                # Don't log responses for availability check to avoid 404 error logs
+                existing_users = await self.get_users_by_filter(username=new_username, log_response=False)
+                if existing_users and len(existing_users) > 0:
+                    result["error"] = f"Username '{new_username}' is already taken"
+                    return result
+                # If existing_users is None or empty list, username is available
+                result["checks"]["username_available"] = True
+            except Exception as e:
+                # If we get an error (like 404), it means username doesn't exist = available
+                logging.info(f"Username '{new_username}' appears to be available (got expected 404)")
+                result["checks"]["username_available"] = True
+
+            # 5. Additional safety checks
+            # Check if user has active subscriptions
+            if user_data.get("is_active", False):
+                logging.warning(f"User {panel_uuid} is currently active - migration may affect service")
+
+            result["checks"]["safe_to_migrate"] = True
+
+            # 6. Perform migration if not dry run
+            if not dry_run:
+                # Use existing update_user_details_on_panel method
+                update_payload = {"username": new_username}
+
+                response_data = await self.update_user_details_on_panel(
+                    user_uuid=panel_uuid,
+                    update_payload=update_payload,
+                    log_response=True
+                )
+
+                if response_data:
+                    result["success"] = True
+                    result["migration_response"] = response_data
+                    logging.info(f"Successfully migrated user {panel_uuid}: '{old_username}' -> '{new_username}'")
+                else:
+                    error_msg = response_data.get('error_message', 'Unknown error') if isinstance(response_data, dict) else 'Update failed'
+                    result["error"] = f"Panel API error: {error_msg}"
+                    logging.error(f"Failed to migrate user {panel_uuid}: {result['error']}")
+            else:
+                result["success"] = True  # Dry run successful
+                logging.info(f"Dry run successful for user {panel_uuid}: '{old_username}' -> '{new_username}'")
+
+        except Exception as e:
+            result["error"] = f"Exception during migration: {str(e)}"
+            logging.error(f"Exception during user migration {panel_uuid}: {e}", exc_info=True)
+
+        return result

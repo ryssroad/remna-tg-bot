@@ -81,7 +81,43 @@ class SubscriptionService:
             return None, None, None, False
 
         current_local_panel_uuid = db_user.panel_user_uuid
-        panel_username_on_panel_standard = f"tg_{user_id}"
+
+        # Generate username in format: userName_userId (fallback to displayName_userId, then tg_userId)
+        source_for_username = None
+        clean_username = ""
+
+        if db_user.username:
+            # Priority 1: Use Telegram @username
+            source_for_username = "TG_USERNAME"
+            clean_username = db_user.username.lstrip('@').replace('-', '_')
+            clean_username = ''.join(c for c in clean_username if c.isalnum() or c == '_')
+        elif db_user.first_name or db_user.last_name:
+            # Priority 2: Use Display Name (first_name + last_name)
+            source_for_username = "DISPLAY_NAME"
+            name_parts = []
+            if db_user.first_name:
+                name_parts.append(db_user.first_name.strip())
+            if db_user.last_name:
+                name_parts.append(db_user.last_name.strip())
+
+            display_name = "_".join(name_parts).replace(' ', '_').replace('-', '_')
+            # Keep only alphanumeric and underscores, remove any other characters
+            clean_username = ''.join(c for c in display_name if c.isalnum() or c == '_')
+
+        if clean_username and source_for_username:
+            # Limit length to avoid exceeding panel requirements (max 34 chars total)
+            max_username_length = 30 - len(str(user_id))  # Reserve space for _userId
+            if max_username_length > 0 and len(clean_username) > 0:
+                clean_username = clean_username[:max_username_length]
+                panel_username_on_panel_standard = f"{clean_username}_{user_id}"
+                logging.info(f"Generated NEW FORMAT username for user {user_id}: '{panel_username_on_panel_standard}' (from {source_for_username}: {db_user.username if source_for_username == 'TG_USERNAME' else f'{db_user.first_name} {db_user.last_name}'})")
+            else:
+                panel_username_on_panel_standard = f"tg_{user_id}"
+                logging.info(f"Generated OLD FORMAT username for user {user_id}: '{panel_username_on_panel_standard}' (cleaned username too short/long)")
+        else:
+            # Priority 3: Fallback to old format
+            panel_username_on_panel_standard = f"tg_{user_id}"
+            logging.info(f"Generated OLD FORMAT username for user {user_id}: '{panel_username_on_panel_standard}' (no TG username or display name)")
 
         panel_user_obj_from_api = None
         panel_user_created_or_linked_now = False
@@ -116,6 +152,7 @@ class SubscriptionService:
                     logging.info(
                         f"Creating new panel user '{panel_username_on_panel_standard}' for TG user {user_id}."
                     )
+                    logging.info(f"[USERNAME DEBUG] About to call create_panel_user with username: '{panel_username_on_panel_standard}'")
                     creation_response = await self.panel_service.create_panel_user(
                         username_on_panel=panel_username_on_panel_standard,
                         telegram_id=user_id,
@@ -128,6 +165,10 @@ class SubscriptionService:
                         default_traffic_limit_bytes=self.settings.user_traffic_limit_bytes,
                         default_traffic_limit_strategy=self.settings.USER_TRAFFIC_STRATEGY,
                     )
+                    if creation_response:
+                        logging.info(f"[USERNAME DEBUG] Panel API response: {creation_response}")
+                    else:
+                        logging.error(f"[USERNAME DEBUG] Panel API returned None/empty response")
                     if (
                         creation_response
                         and not creation_response.get("error")
@@ -156,6 +197,7 @@ class SubscriptionService:
                     default_traffic_limit_bytes=self.settings.user_traffic_limit_bytes,
                     default_traffic_limit_strategy=self.settings.USER_TRAFFIC_STRATEGY,
                 )
+
                 if (
                     creation_response
                     and not creation_response.get("error")

@@ -227,3 +227,20 @@ async def get_user_ids_without_active_subscription(session: AsyncSession) -> Lis
     )
     result = await session.execute(stmt)
     return result.scalars().all()
+
+
+async def get_users_with_panel_uuid_and_username(session: AsyncSession, limit: int = 100) -> List[User]:
+    """Get users who have both panel_user_uuid and username (candidates for migration)"""
+    stmt = (
+        select(User)
+        .where(
+            and_(
+                User.panel_user_uuid.isnot(None),
+                User.username.isnot(None),
+                User.username != "",
+            )
+        )
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
