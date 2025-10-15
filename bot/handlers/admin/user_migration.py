@@ -66,7 +66,7 @@ async def migrate_usernames_command(message: types.Message,
             f"✅ Safe to migrate: <b>{summary['safe_count']}</b>\n"
             f"❌ Unsafe/conflicts: <b>{summary['unsafe_count']}</b>\n"
             f"⚠️ Errors: <b>{summary['error_count']}</b>\n\n"
-            f"{'🧪 Ready for dry run migration' if dry_run else '🚀 Ready for actual migration'}",
+            f"{'🧪 Ready for dry run migration' if dry_run else '⚙️ Ready for actual migration'}",
             parse_mode="HTML"
         )
 
@@ -92,7 +92,7 @@ async def migrate_usernames_command(message: types.Message,
             return
 
         await message.reply(
-            f"🚀 <b>Step 3:</b> {'Performing dry run' if dry_run else 'Performing migration'} "
+            f"⚙️ <b>Step 3:</b> {'Performing dry run' if dry_run else 'Performing migration'} "
             f"for <b>{len(safe_candidates)}</b> users...",
             parse_mode="HTML"
         )

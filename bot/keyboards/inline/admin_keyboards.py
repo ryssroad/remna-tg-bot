@@ -378,7 +378,7 @@ def get_broadcast_confirmation_keyboard(lang: str,
     builder.adjust(3)
 
     # Row: confirmation
-    builder.button(text=_(key="confirm_broadcast_send_button", default="🚀 Отправить"),
+    builder.button(text=_(key="confirm_broadcast_send_button", default="📤 Отправить"),
                    callback_data="broadcast_final_action:send")
     builder.button(text=_(key="cancel_broadcast_button", default="❌ Отмена"),
                    callback_data="broadcast_final_action:cancel")

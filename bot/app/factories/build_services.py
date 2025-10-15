@@ -12,6 +12,9 @@ from bot.services.stars_service import StarsService
 from bot.services.tribute_service import TributeService
 from bot.services.crypto_pay_service import CryptoPayService
 from bot.services.panel_webhook_service import PanelWebhookService
+from bot.services.freekassa_service import FreeKassaService
+from bot.services.best2pay_service import Best2PayService
+from bot.services.nowpayments_service import NOWPaymentsService
 
 
 def build_core_services(
@@ -53,6 +56,9 @@ def build_core_services(
         bot_username_for_default_return=bot_username_for_default_return,
         settings_obj=settings,
     )
+    freekassa_service = FreeKassaService(settings)
+    best2pay_service = Best2PayService(settings)
+    nowpayments_service = NOWPaymentsService(settings)
 
     # Wire services that depend on each other
     try:
@@ -73,6 +79,9 @@ def build_core_services(
         "tribute_service": tribute_service,
         "panel_webhook_service": panel_webhook_service,
         "yookassa_service": yookassa_service,
+        "freekassa_service": freekassa_service,
+        "best2pay_service": best2pay_service,
+        "nowpayments_service": nowpayments_service,
     }
 
 

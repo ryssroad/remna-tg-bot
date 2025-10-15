@@ -73,6 +73,21 @@ class Settings(BaseSettings):
     TRIBUTE_SKIP_CANCELLATION_NOTIFICATIONS: bool = Field(default=False, description="Skip cancellation notifications for Tribute payments")
     PANEL_WEBHOOK_SECRET: Optional[str] = Field(default=None)
 
+    FREEKASSA_MERCHANT_ID: Optional[str] = Field(default=None)
+    FREEKASSA_SECRET_WORD_1: Optional[str] = Field(default=None)
+    FREEKASSA_SECRET_WORD_2: Optional[str] = Field(default=None)
+    FREEKASSA_API_KEY: Optional[str] = Field(default=None)
+    FREEKASSA_ENABLED: bool = Field(default=True)
+
+    BEST2PAY_SECTOR_ID: Optional[str] = Field(default=None)
+    BEST2PAY_SECTOR_UUID: Optional[str] = Field(default=None)  # UUID для API запросов
+    BEST2PAY_PASSWORD: Optional[str] = Field(default=None)
+    BEST2PAY_ENABLED: bool = Field(default=True)
+
+    NOWPAYMENTS_API_KEY: Optional[str] = Field(default=None)
+    NOWPAYMENTS_IPN_SECRET: Optional[str] = Field(default=None)
+    NOWPAYMENTS_ENABLED: bool = Field(default=True)
+
     SUBSCRIPTION_NOTIFICATIONS_ENABLED: bool = Field(default=True)
     SUBSCRIPTION_NOTIFY_ON_EXPIRE: bool = Field(default=True)
     SUBSCRIPTION_NOTIFY_AFTER_EXPIRE: bool = Field(default=True)
@@ -234,6 +249,97 @@ class Settings(BaseSettings):
         base = self.WEBHOOK_BASE_URL
         if base:
             return f"{base.rstrip('/')}{self.cryptopay_webhook_path}"
+        return None
+
+    @computed_field
+    @property
+    def freekassa_notify_webhook_path(self) -> str:
+        return "/202321/freekassa/notify"
+
+    @computed_field
+    @property
+    def freekassa_success_webhook_path(self) -> str:
+        return "/202321/freekassa/success"
+
+    @computed_field
+    @property
+    def freekassa_fail_webhook_path(self) -> str:
+        return "/202321/freekassa/fail"
+
+    @computed_field
+    @property
+    def freekassa_notify_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.freekassa_notify_webhook_path}"
+        return None
+
+    @computed_field
+    @property
+    def freekassa_success_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.freekassa_success_webhook_path}"
+        return None
+
+    @computed_field
+    @property
+    def freekassa_fail_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.freekassa_fail_webhook_path}"
+        return None
+
+    @computed_field
+    @property
+    def best2pay_notify_webhook_path(self) -> str:
+        return "/202321/best2pay/notify"
+
+    @computed_field
+    @property
+    def best2pay_success_webhook_path(self) -> str:
+        return "/202321/best2pay/success"
+
+    @computed_field
+    @property
+    def best2pay_fail_webhook_path(self) -> str:
+        return "/202321/best2pay/fail"
+
+    @computed_field
+    @property
+    def best2pay_notify_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.best2pay_notify_webhook_path}"
+        return None
+
+    @computed_field
+    @property
+    def best2pay_success_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.best2pay_success_webhook_path}"
+        return None
+
+    @computed_field
+    @property
+    def best2pay_fail_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.best2pay_fail_webhook_path}"
+        return None
+
+    @computed_field
+    @property
+    def nowpayments_ipn_webhook_path(self) -> str:
+        return "/webhook/nowpayments"
+
+    @computed_field
+    @property
+    def nowpayments_ipn_full_webhook_url(self) -> Optional[str]:
+        base = self.WEBHOOK_BASE_URL
+        if base:
+            return f"{base.rstrip('/')}{self.nowpayments_ipn_webhook_path}"
         return None
 
     # Computed YooKassa receipt fields based on recurring toggle

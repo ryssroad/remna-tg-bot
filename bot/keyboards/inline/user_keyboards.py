@@ -39,26 +39,29 @@ def get_main_menu_inline_keyboard(
     language_button = InlineKeyboardButton(
         text=_(key="menu_language_settings_inline"),
         callback_data="main_action:language")
-    status_button_list = []
-    if settings.SERVER_STATUS_URL:
-        status_button_list.append(
-            InlineKeyboardButton(text=_(key="menu_server_status_button"),
-                                 url=settings.SERVER_STATUS_URL))
+    # Disabled status button
+    # status_button_list = []
+    # if settings.SERVER_STATUS_URL:
+    #     status_button_list.append(
+    #         InlineKeyboardButton(text=_(key="menu_server_status_button"),
+    #                              url=settings.SERVER_STATUS_URL))
 
-    if status_button_list:
-        builder.row(language_button, *status_button_list)
-    else:
-        builder.row(language_button)
+    # if status_button_list:
+    #     builder.row(language_button, *status_button_list)
+    # else:
+    #     builder.row(language_button)
+    builder.row(language_button)
 
     if settings.SUPPORT_LINK:
         builder.row(
             InlineKeyboardButton(text=_(key="menu_support_button"),
                                  url=settings.SUPPORT_LINK))
 
-    if settings.TERMS_OF_SERVICE_URL:
-        builder.row(
-            InlineKeyboardButton(text=_(key="menu_terms_button"),
-                                 url=settings.TERMS_OF_SERVICE_URL))
+    # Disabled terms of service button
+    # if settings.TERMS_OF_SERVICE_URL:
+    #     builder.row(
+    #         InlineKeyboardButton(text=_(key="menu_terms_button"),
+    #                              url=settings.TERMS_OF_SERVICE_URL))
 
     return builder.as_markup()
 
@@ -129,6 +132,15 @@ def get_payment_method_keyboard(months: int, price: float,
     if settings.CRYPTOPAY_ENABLED:
         builder.button(text=_("pay_with_cryptopay_button"),
                        callback_data=f"pay_crypto:{months}:{price}")
+    if settings.FREEKASSA_ENABLED:
+        builder.button(text=_("pay_with_freekassa_button"),
+                       callback_data=f"pay_fk:{months}:{price}")
+    if settings.BEST2PAY_ENABLED:
+        builder.button(text=_("pay_with_best2pay_button"),
+                       callback_data=f"pay_b2p:{months}:{price}")
+    if settings.NOWPAYMENTS_ENABLED:
+        builder.button(text=_("pay_with_nowpayments_button"),
+                       callback_data=f"pay_nowp:{months}:{price}")
     builder.button(text=_(key="cancel_button"),
                    callback_data="main_action:subscribe")
     builder.adjust(1)

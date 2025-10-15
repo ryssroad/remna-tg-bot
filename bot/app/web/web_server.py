@@ -30,6 +30,9 @@ async def build_and_start_web_app(
         "cryptopay_service",
         "tribute_service",
         "panel_webhook_service",
+        "freekassa_service",
+        "best2pay_service",
+        "nowpayments_service",
     ):
         # Access dispatcher workflow_data directly to avoid sequence protocol issues
         if hasattr(dp, "workflow_data") and key in dp.workflow_data:  # type: ignore
@@ -50,6 +53,17 @@ async def build_and_start_web_app(
     from bot.services.tribute_service import tribute_webhook_route
     from bot.services.crypto_pay_service import cryptopay_webhook_route
     from bot.services.panel_webhook_service import panel_webhook_route
+    from bot.services.freekassa_service import (
+        freekassa_notify_webhook,
+        freekassa_success_webhook,
+        freekassa_fail_webhook
+    )
+    from bot.services.best2pay_service import (
+        best2pay_notify_webhook,
+        best2pay_success_webhook,
+        best2pay_fail_webhook
+    )
+    from bot.services.nowpayments_service import nowpayments_ipn_webhook
 
     tribute_path = settings.tribute_webhook_path
     if tribute_path.startswith("/"):
@@ -71,6 +85,44 @@ async def build_and_start_web_app(
     if panel_path.startswith("/"):
         app.router.add_post(panel_path, panel_webhook_route)
         logging.info(f"Panel webhook route configured at: [POST] {panel_path}")
+
+    # FreeKassa webhooks
+    freekassa_notify_path = settings.freekassa_notify_webhook_path
+    if freekassa_notify_path.startswith("/"):
+        app.router.add_post(freekassa_notify_path, freekassa_notify_webhook)
+        logging.info(f"FreeKassa notify webhook route configured at: [POST] {freekassa_notify_path}")
+
+    freekassa_success_path = settings.freekassa_success_webhook_path
+    if freekassa_success_path.startswith("/"):
+        app.router.add_post(freekassa_success_path, freekassa_success_webhook)
+        logging.info(f"FreeKassa success webhook route configured at: [POST] {freekassa_success_path}")
+
+    freekassa_fail_path = settings.freekassa_fail_webhook_path
+    if freekassa_fail_path.startswith("/"):
+        app.router.add_post(freekassa_fail_path, freekassa_fail_webhook)
+        logging.info(f"FreeKassa fail webhook route configured at: [POST] {freekassa_fail_path}")
+
+    # Best2Pay webhooks
+    best2pay_notify_path = settings.best2pay_notify_webhook_path
+    if best2pay_notify_path.startswith("/"):
+        app.router.add_post(best2pay_notify_path, best2pay_notify_webhook)
+        logging.info(f"Best2Pay notify webhook route configured at: [POST] {best2pay_notify_path}")
+
+    best2pay_success_path = settings.best2pay_success_webhook_path
+    if best2pay_success_path.startswith("/"):
+        app.router.add_post(best2pay_success_path, best2pay_success_webhook)
+        logging.info(f"Best2Pay success webhook route configured at: [POST] {best2pay_success_path}")
+
+    best2pay_fail_path = settings.best2pay_fail_webhook_path
+    if best2pay_fail_path.startswith("/"):
+        app.router.add_post(best2pay_fail_path, best2pay_fail_webhook)
+        logging.info(f"Best2Pay fail webhook route configured at: [POST] {best2pay_fail_path}")
+
+    # NOWPayments IPN webhook
+    nowpayments_path = settings.nowpayments_ipn_webhook_path
+    if nowpayments_path.startswith("/"):
+        app.router.add_post(nowpayments_path, nowpayments_ipn_webhook)
+        logging.info(f"NOWPayments IPN webhook route configured at: [POST] {nowpayments_path}")
 
     web_app_runner = web.AppRunner(app)
     await web_app_runner.setup()

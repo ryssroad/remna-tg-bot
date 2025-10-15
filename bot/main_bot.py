@@ -206,6 +206,9 @@ async def on_shutdown_configured(dispatcher: Dispatcher):
         "stars_service",
         "subscription_service",
         "referral_service",
+        "freekassa_service",
+        "best2pay_service",
+        "nowpayments_service",
     ):
         await close_service(service_key)
 

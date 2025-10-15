@@ -8,6 +8,9 @@ from bot.keyboards.inline.user_keyboards import get_payment_method_keyboard, get
 from bot.services.yookassa_service import YooKassaService
 from bot.services.crypto_pay_service import CryptoPayService
 from bot.services.stars_service import StarsService
+from bot.services.freekassa_service import FreeKassaService
+from bot.services.best2pay_service import Best2PayService
+from bot.services.nowpayments_service import NOWPaymentsService
 from bot.middlewares.i18n import JsonI18n
 from db.dal import payment_dal, user_billing_dal
 
@@ -311,6 +314,334 @@ async def pay_crypto_callback_handler(
     )
 
     if invoice_url:
+        try:
+            await callback.message.edit_text(
+                get_text(key="payment_link_message", months=months),
+                reply_markup=get_payment_url_keyboard(invoice_url, current_lang, i18n),
+                disable_web_page_preview=False,
+            )
+        except Exception:
+            try:
+                await callback.message.answer(
+                    get_text(key="payment_link_message", months=months),
+                    reply_markup=get_payment_url_keyboard(invoice_url, current_lang, i18n),
+                    disable_web_page_preview=False,
+                )
+            except Exception:
+                pass
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+
+    try:
+        await callback.answer(get_text("error_payment_gateway"), show_alert=True)
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("pay_fk:"))
+async def pay_freekassa_callback_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+    freekassa_service: FreeKassaService,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    get_text = (lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key)
+
+    if not i18n or not callback.message:
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    if not freekassa_service or not freekassa_service.merchant_id:
+        try:
+            await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    try:
+        _, data_payload = callback.data.split(":", 1)
+        months_str, price_str = data_payload.split(":")
+        months = int(months_str)
+        price_amount = float(price_str)
+    except (ValueError, IndexError):
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    user_id = callback.from_user.id
+    payment_description = get_text("payment_description_subscription", months=months)
+
+    # Create payment record in database
+    db_payment_record = await payment_dal.create_payment_record(
+        session,
+        {
+            "user_id": user_id,
+            "amount": price_amount,
+            "currency": settings.DEFAULT_CURRENCY_SYMBOL,
+            "status": "pending_freekassa",
+            "subscription_duration_months": months,
+            "provider": "freekassa",
+        }
+    )
+
+    if not db_payment_record:
+        logging.error(f"Failed to create payment record for user {user_id} in FreeKassa handler")
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    logging.info(
+        f"Payment record {db_payment_record.payment_id} created for user {user_id} with status 'pending_freekassa'."
+    )
+
+    # Create FreeKassa payment link
+    payment_url = freekassa_service.create_payment_link(
+        amount=price_amount,
+        order_id=db_payment_record.payment_id,
+        months=months,
+        currency=settings.DEFAULT_CURRENCY_SYMBOL,
+    )
+
+    if payment_url:
+        try:
+            await callback.message.edit_text(
+                get_text(key="payment_link_message", months=months),
+                reply_markup=get_payment_url_keyboard(payment_url, current_lang, i18n),
+                disable_web_page_preview=False,
+            )
+        except Exception:
+            try:
+                await callback.message.answer(
+                    get_text(key="payment_link_message", months=months),
+                    reply_markup=get_payment_url_keyboard(payment_url, current_lang, i18n),
+                    disable_web_page_preview=False,
+                )
+            except Exception:
+                pass
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+
+    try:
+        await callback.answer(get_text("error_payment_gateway"), show_alert=True)
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("pay_b2p:"))
+async def pay_best2pay_callback_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+    best2pay_service: Best2PayService,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    get_text = (lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key)
+
+    if not i18n or not callback.message:
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    if not best2pay_service or not best2pay_service.configured:
+        try:
+            await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    try:
+        _, data_payload = callback.data.split(":", 1)
+        months_str, price_str = data_payload.split(":")
+        months = int(months_str)
+        price_amount = float(price_str)
+    except (ValueError, IndexError):
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    user_id = callback.from_user.id
+    payment_description = get_text("payment_description_subscription", months=months)
+
+    # Create payment record in database
+    db_payment_record = await payment_dal.create_payment_record(
+        session,
+        {
+            "user_id": user_id,
+            "amount": price_amount,
+            "currency": settings.DEFAULT_CURRENCY_SYMBOL,
+            "status": "pending_best2pay",
+            "subscription_duration_months": months,
+            "provider": "best2pay",
+        }
+    )
+
+    if not db_payment_record:
+        logging.error(f"Failed to create payment record for user {user_id} in Best2Pay handler")
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    logging.info(
+        f"Payment record {db_payment_record.payment_id} created for user {user_id} "
+        f"with status 'pending_best2pay'."
+    )
+
+    # Step 1: Register order in Best2Pay
+    register_result = await best2pay_service.register_order(
+        amount=price_amount,
+        reference=str(db_payment_record.payment_id),
+        currency="RUB",
+        description=payment_description,
+        url=settings.best2pay_success_webhook_url if hasattr(settings, 'best2pay_success_webhook_url') else None,
+        fail_url=settings.best2pay_fail_webhook_url if hasattr(settings, 'best2pay_fail_webhook_url') else None,
+    )
+
+    if not register_result or not register_result.get("order_id"):
+        logging.error(f"Failed to register Best2Pay order for user {user_id}")
+        try:
+            await callback.answer(get_text("error_payment_gateway"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    best2pay_order_id = register_result["order_id"]
+    logging.info(f"Best2Pay order {best2pay_order_id} registered for payment {db_payment_record.payment_id}")
+
+    # Step 2: Create payment URL (СБП)
+    payment_url = await best2pay_service.create_payment_url(
+        order_id=best2pay_order_id,
+        payment_method="sbp"
+    )
+
+    if payment_url:
+        try:
+            await callback.message.edit_text(
+                get_text(key="payment_link_message", months=months),
+                reply_markup=get_payment_url_keyboard(payment_url, current_lang, i18n),
+                disable_web_page_preview=False,
+            )
+        except Exception:
+            try:
+                await callback.message.answer(
+                    get_text(key="payment_link_message", months=months),
+                    reply_markup=get_payment_url_keyboard(payment_url, current_lang, i18n),
+                    disable_web_page_preview=False,
+                )
+            except Exception:
+                pass
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+
+    try:
+        await callback.answer(get_text("error_payment_gateway"), show_alert=True)
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("pay_nowp:"))
+async def pay_nowpayments_callback_handler(
+    callback: types.CallbackQuery,
+    settings: Settings,
+    i18n_data: dict,
+    session: AsyncSession,
+    nowpayments_service: NOWPaymentsService,
+):
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    get_text = (lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key)
+
+    if not i18n or not callback.message:
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    if not nowpayments_service or not nowpayments_service.configured:
+        try:
+            await callback.answer(get_text("payment_service_unavailable_alert"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    try:
+        _, data_payload = callback.data.split(":", 1)
+        months_str, price_str = data_payload.split(":")
+        months = int(months_str)
+        price_amount = float(price_str)
+    except (ValueError, IndexError):
+        try:
+            await callback.answer(get_text("error_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    user_id = callback.from_user.id
+    payment_description = get_text("payment_description_subscription", months=months)
+
+    # Create payment record in database
+    db_payment_record = await payment_dal.create_payment_record(
+        session,
+        {
+            "user_id": user_id,
+            "amount": price_amount,
+            "currency": "RUB",
+            "status": "pending_nowpayments",
+            "subscription_duration_months": months,
+            "provider": "nowpayments",
+        }
+    )
+
+    if not db_payment_record:
+        logging.error(f"Failed to create payment record for user {user_id} in NOWPayments handler")
+        try:
+            await callback.answer(get_text("error_occurred_try_again"), show_alert=True)
+        except Exception:
+            pass
+        return
+
+    logging.info(
+        f"Payment record {db_payment_record.payment_id} created for user {user_id} "
+        f"with status 'pending_nowpayments'."
+    )
+
+    # Create NOWPayments invoice
+    invoice_data = await nowpayments_service.create_invoice(
+        price_amount=price_amount,
+        price_currency="RUB",
+        order_id=str(db_payment_record.payment_id),
+        order_description=payment_description,
+    )
+
+    if invoice_data and invoice_data.get("invoice_url"):
+        invoice_url = invoice_data["invoice_url"]
         try:
             await callback.message.edit_text(
                 get_text(key="payment_link_message", months=months),
