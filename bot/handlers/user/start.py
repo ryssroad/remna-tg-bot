@@ -356,6 +356,113 @@ async def select_language_callback_handler(
                          is_edit=True)
 
 
+async def handle_personal_cabinet(
+        callback: types.CallbackQuery,
+        i18n_data: dict,
+        settings: Settings,
+        session: AsyncSession,
+        subscription_service: SubscriptionService):
+    """Handle personal cabinet button click - generate one-time auth link"""
+    import aiohttp
+
+    current_lang = i18n_data.get("current_language", settings.DEFAULT_LANGUAGE)
+    i18n: Optional[JsonI18n] = i18n_data.get("i18n_instance")
+    _ = lambda key, **kwargs: i18n.gettext(current_lang, key, **kwargs) if i18n else key
+
+    user_id = callback.from_user.id
+
+    try:
+        # Get user's panel UUID from database
+        db_user = await user_dal.get_user_by_id(session, user_id)
+
+        if not db_user:
+            await callback.answer("❌ User not found. Please try /start again.", show_alert=True)
+            return
+
+        # If user doesn't have panel_user_uuid, create panel user now
+        if not db_user.panel_user_uuid:
+            logging.info(f"User {user_id} has no panel_user_uuid. Creating panel user for personal cabinet access...")
+
+            # Use subscription service to create/get panel user
+            panel_uuid, panel_sub_link_id, panel_short_uuid, panel_user_created = (
+                await subscription_service._get_or_create_panel_user_link_details(session, user_id, db_user)
+            )
+
+            if not panel_uuid:
+                await callback.answer("❌ Failed to create panel user. Please try again later or contact support.", show_alert=True)
+                return
+
+            # Commit the panel_user_uuid update to database
+            await session.commit()
+
+            logging.info(f"✅ Panel user created for user {user_id}: UUID {panel_uuid}")
+        else:
+            panel_uuid = db_user.panel_user_uuid
+
+        logging.info(f"Generating personal cabinet link for user {user_id}, panel_uuid: {panel_uuid}")
+
+        # Ensure user exists in auth database by inserting if not exists
+        try:
+            from sqlalchemy import text
+            auth_db_url = "postgresql://lider:nopass000@localhost:5432/liderdb"
+
+            # Create user in auth database if not exists
+            import asyncpg
+            auth_conn = await asyncpg.connect(auth_db_url)
+            try:
+                await auth_conn.execute(
+                    'INSERT INTO "User" (id, email, "createdAt", "updatedAt") VALUES ($1, NULL, NOW(), NOW()) ON CONFLICT (id) DO NOTHING',
+                    panel_uuid
+                )
+            finally:
+                await auth_conn.close()
+        except Exception as e:
+            logging.error(f"Failed to ensure user exists in auth database: {e}")
+
+        # Call auth service to generate one-time link
+        auth_url = "http://localhost:4000/auth/link"
+
+        async with aiohttp.ClientSession() as http_session:
+            async with http_session.post(auth_url, json={"userId": panel_uuid}) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    one_time_link = data.get("url")
+
+                    if one_time_link:
+                        # Send the link to user
+                        if current_lang == "ru":
+                            message_text = f"🏠 <b>Личный кабинет</b>\n\n🔗 Ваша персональная ссылка для входа:\n{one_time_link}\n\n⚠️ Ссылка одноразовая и действительна в течение 5 минут."
+                        else:
+                            message_text = f"🏠 <b>Personal Cabinet</b>\n\n🔗 Your personal login link:\n{one_time_link}\n\n⚠️ Link is one-time use and valid for 5 minutes."
+
+                        from bot.keyboards.inline.user_keyboards import get_back_to_main_menu_markup
+
+                        if callback.message:
+                            try:
+                                await callback.message.edit_text(
+                                    message_text,
+                                    reply_markup=get_back_to_main_menu_markup(current_lang, i18n),
+                                    parse_mode="HTML"
+                                )
+                            except Exception:
+                                await callback.message.answer(
+                                    message_text,
+                                    reply_markup=get_back_to_main_menu_markup(current_lang, i18n),
+                                    parse_mode="HTML"
+                                )
+                        await callback.answer()
+                    else:
+                        await callback.answer("❌ Failed to generate link", show_alert=True)
+                else:
+                    error_text = await response.text()
+                    logging.error(f"Auth service returned status {response.status}: {error_text}")
+                    await callback.answer("❌ Service temporarily unavailable", show_alert=True)
+
+    except Exception as e:
+        logging.error(f"Error generating personal cabinet link for user {user_id}: {e}", exc_info=True)
+        await callback.answer("❌ Error generating link. Please try again later.", show_alert=True)
+
+
 @router.callback_query(F.data.startswith("main_action:"))
 async def main_action_callback_handler(
         callback: types.CallbackQuery, state: FSMContext, settings: Settings,
@@ -394,6 +501,8 @@ async def main_action_callback_handler(
     elif action == "language":
 
         await language_command_handler(callback, i18n_data, settings)
+    elif action == "personal_cabinet":
+        await handle_personal_cabinet(callback, i18n_data, settings, session, subscription_service)
     elif action == "back_to_main":
         await send_main_menu(callback,
                              settings,

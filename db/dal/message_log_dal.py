@@ -2,7 +2,7 @@ import logging
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, delete
 
 from ..models import MessageLog, User
 
@@ -74,3 +74,16 @@ async def create_message_log_no_commit(session: AsyncSession,
         f"Message log added to session: user {log_data.get('user_id')}, event {log_data.get('event_type')}"
     )
     return new_log
+
+
+async def delete_user_message_logs(session: AsyncSession, user_id: int) -> int:
+    """Delete all message logs for a user (both as user_id and target_user_id)"""
+    stmt = delete(MessageLog).where(
+        or_(MessageLog.user_id == user_id, MessageLog.target_user_id == user_id)
+    )
+    result = await session.execute(stmt)
+    if result.rowcount > 0:
+        logging.info(
+            f"Deleted {result.rowcount} message log records for user {user_id}."
+        )
+    return result.rowcount

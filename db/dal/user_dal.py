@@ -244,3 +244,12 @@ async def get_users_with_panel_uuid_and_username(session: AsyncSession, limit: i
     )
     result = await session.execute(stmt)
     return result.scalars().all()
+
+
+async def delete_user(session: AsyncSession, user_id: int) -> int:
+    """Delete user from database"""
+    stmt = delete(User).where(User.user_id == user_id)
+    result = await session.execute(stmt)
+    if result.rowcount > 0:
+        logging.info(f"Deleted user {user_id} from database.")
+    return result.rowcount

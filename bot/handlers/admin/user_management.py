@@ -89,8 +89,14 @@ def get_user_card_keyboard(user_id: int, i18n_instance, lang: str) -> InlineKeyb
         text=_(key="admin_user_refresh_button", default="🔄 Обновить"),
         callback_data=f"user_action:refresh:{user_id}"
     )
-    
-    # Row 4: Back button
+
+    # Row 4: Delete user (dangerous action)
+    builder.button(
+        text=_(key="admin_user_delete_button", default="🗑️ Удалить пользователя"),
+        callback_data=f"user_action:delete_confirm:{user_id}"
+    )
+
+    # Row 5: Back button
     builder.button(
         text=_(key="admin_user_search_new_button", default="🔍 Найти другого"),
         callback_data="admin_action:users_management"
@@ -99,8 +105,8 @@ def get_user_card_keyboard(user_id: int, i18n_instance, lang: str) -> InlineKeyb
         text=_(key="back_to_admin_panel_button"),
         callback_data="admin_action:main"
     )
-    
-    builder.adjust(2, 2, 2, 2)
+
+    builder.adjust(2, 2, 2, 1, 2)
     return builder
 
 
@@ -283,6 +289,10 @@ async def user_action_handler(callback: types.CallbackQuery, state: FSMContext,
         await handle_view_user_logs(callback, user, session, settings, i18n, current_lang)
     elif action == "refresh":
         await handle_refresh_user_card(callback, user, subscription_service, session, i18n, current_lang)
+    elif action == "delete_confirm":
+        await handle_delete_user_confirm(callback, user, i18n, current_lang)
+    elif action == "delete_execute":
+        await handle_delete_user_execute(callback, user, panel_service, session, i18n, current_lang)
     else:
         await callback.answer(_("admin_unknown_action"), show_alert=True)
 
@@ -932,3 +942,146 @@ async def process_unban_user_handler(message: types.Message, state: FSMContext,
         ))
     
     await state.clear()
+
+async def handle_delete_user_confirm(callback: types.CallbackQuery, user: User,
+                                     i18n_instance, lang: str):
+    """Show confirmation prompt before deleting user"""
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+
+    # Format panel UUID for display
+    panel_uuid_display = user.panel_user_uuid[:16] + "..." if user.panel_user_uuid else "N/A"
+    username_display = user.username or "N/A"
+
+    warning_text = _(
+        key="admin_user_delete_confirm_text",
+        user_id=user.user_id,
+        username=username_display,
+        panel_uuid=panel_uuid_display
+    )
+
+    # Create confirmation keyboard
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=_(key="admin_user_delete_execute_button", default="🗑️ ДА, УДАЛИТЬ"),
+        callback_data=f"user_action:delete_execute:{user.user_id}"
+    )
+    builder.button(
+        text=_(key="admin_user_delete_cancel_button", default="❌ Отмена"),
+        callback_data=f"user_action:refresh:{user.user_id}"
+    )
+    builder.adjust(1)
+
+    try:
+        await callback.message.edit_text(
+            warning_text,
+            reply_markup=builder.as_markup(),
+            parse_mode="HTML"
+        )
+    except Exception:
+        await callback.message.answer(
+            warning_text,
+            reply_markup=builder.as_markup(),
+            parse_mode="HTML"
+        )
+
+    await callback.answer()
+
+
+async def handle_delete_user_execute(callback: types.CallbackQuery, user: User,
+                                     panel_service: PanelApiService,
+                                     session: AsyncSession, i18n_instance, lang: str):
+    """Execute user deletion from bot DB and panel"""
+    _ = lambda key, **kwargs: i18n_instance.gettext(lang, key, **kwargs)
+
+    try:
+        user_id = user.user_id
+        panel_uuid = user.panel_user_uuid
+        username_display = user.username or f"ID:{user_id}"
+
+        logging.info(f"Admin requested deletion of user {user_id} (panel_uuid: {panel_uuid})")
+
+        # 1. Delete from panel if UUID exists
+        panel_deleted = False
+        if panel_uuid:
+            try:
+                delete_result = await panel_service.delete_panel_user(panel_uuid)
+                if delete_result:
+                    panel_deleted = True
+                    logging.info(f"User {user_id} deleted from panel (UUID: {panel_uuid})")
+                else:
+                    logging.warning(f"Failed to delete user {user_id} from panel (UUID: {panel_uuid})")
+            except Exception as e:
+                logging.error(f"Error deleting user {user_id} from panel: {e}")
+
+        # 2. Delete all subscriptions
+        await subscription_dal.delete_all_user_subscriptions(session, user_id)
+        logging.info(f"All subscriptions deleted for user {user_id}")
+
+        # 3. Delete all message logs
+        await message_log_dal.delete_user_message_logs(session, user_id)
+        logging.info(f"All message logs deleted for user {user_id}")
+
+        # 4. Delete user from bot database
+        await user_dal.delete_user(session, user_id)
+        logging.info(f"User {user_id} deleted from bot database")
+
+        await session.commit()
+
+        # Prepare success message
+        success_parts = [
+            _(key="admin_user_delete_success_title", default="✅ <b>Пользователь удалён</b>\n"),
+            f"👤 {username_display}",
+            f"🆔 ID: <code>{user_id}</code>\n",
+            _("admin_user_delete_success_bot_db", default="✅ Удалён из БД бота"),
+            _("admin_user_delete_success_subscriptions", default="✅ Все подписки удалены"),
+            _("admin_user_delete_success_logs", default="✅ Все логи удалены"),
+        ]
+
+        if panel_deleted:
+            success_parts.append(
+                _("admin_user_delete_success_panel", default="✅ Удалён из панели")
+            )
+        elif panel_uuid:
+            success_parts.append(
+                _("admin_user_delete_warning_panel", default="⚠️ Не удалось удалить из панели")
+            )
+
+        success_text = "\n".join(success_parts)
+
+        # Show success message with back button
+        builder = InlineKeyboardBuilder()
+        builder.button(
+            text=_(key="admin_user_search_new_button", default="🔍 Найти другого"),
+            callback_data="admin_action:users_management"
+        )
+        builder.button(
+            text=_(key="back_to_admin_panel_button"),
+            callback_data="admin_action:main"
+        )
+        builder.adjust(1)
+
+        try:
+            await callback.message.edit_text(
+                success_text,
+                reply_markup=builder.as_markup(),
+                parse_mode="HTML"
+            )
+        except Exception:
+            await callback.message.answer(
+                success_text,
+                reply_markup=builder.as_markup(),
+                parse_mode="HTML"
+            )
+
+        await callback.answer(
+            _(key="admin_user_delete_complete", default="✅ Пользователь удалён"),
+            show_alert=True
+        )
+
+    except Exception as e:
+        logging.error(f"Error executing user deletion for {user.user_id}: {e}", exc_info=True)
+        await session.rollback()
+        await callback.answer(_(
+            "admin_user_delete_error",
+            default="❌ Ошибка удаления пользователя"
+        ), show_alert=True)
