@@ -39,7 +39,7 @@
   "pay_with_stars_button": "🌟 Telegram Stars",
   "connect_button": "🔗 Connect",
   "cancel_button": "❌ Cancel",
-  "payment_description_subscription": "Subscription payment for {months} mo.",
+  "payment_description_subscription": "Tech support",
   "payment_link_message": "To pay for {months} mo. subscription, click the button below:",
   "payment_successful_error_details": "✅ Payment succeeded, but an error occurred displaying details. Your subscription is active. Contact support if anything is wrong.",
   "payment_successful_full": "✅ Payment successful!\nYour {months}-month subscription is active until {end_date}.\n\nConnection key:\n<code>{config_link}</code>\n\nTo connect, open the link and follow the instructions 👇",
