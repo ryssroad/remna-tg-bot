@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     BEST2PAY_SECTOR_ID: Optional[str] = Field(default=None)
     BEST2PAY_SECTOR_UUID: Optional[str] = Field(default=None)  # UUID для API запросов
     BEST2PAY_PASSWORD: Optional[str] = Field(default=None)
+    BEST2PAY_API_URL: str = Field(
+        default="https://pay.best2pay.net/webapi/",
+        description="Best2Pay API URL (use https://test.best2pay.net/webapi/ for testing)"
+    )
     BEST2PAY_ENABLED: bool = Field(default=True)
 
     NOWPAYMENTS_API_KEY: Optional[str] = Field(default=None)
@@ -254,17 +258,17 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def freekassa_notify_webhook_path(self) -> str:
-        return "/202321/freekassa/notify"
+        return "/webhook/freekassa/notify"
 
     @computed_field
     @property
     def freekassa_success_webhook_path(self) -> str:
-        return "/202321/freekassa/success"
+        return "/webhook/freekassa/success"
 
     @computed_field
     @property
     def freekassa_fail_webhook_path(self) -> str:
-        return "/202321/freekassa/fail"
+        return "/webhook/freekassa/fail"
 
     @computed_field
     @property
@@ -293,17 +297,17 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def best2pay_notify_webhook_path(self) -> str:
-        return "/202321/best2pay/notify"
+        return "/webhook/best2pay/notify"
 
     @computed_field
     @property
     def best2pay_success_webhook_path(self) -> str:
-        return "/202321/best2pay/success"
+        return "/webhook/best2pay/success"
 
     @computed_field
     @property
     def best2pay_fail_webhook_path(self) -> str:
-        return "/202321/best2pay/fail"
+        return "/webhook/best2pay/fail"
 
     @computed_field
     @property

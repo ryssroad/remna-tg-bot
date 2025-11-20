@@ -9,6 +9,7 @@ from . import sync_admin
 from . import logs_admin
 from . import payments
 from . import user_migration
+from . import test_b2p
 
 admin_router_aggregate = Router(name="admin_features_router")
 
@@ -21,5 +22,6 @@ admin_router_aggregate.include_router(sync_admin.router)
 admin_router_aggregate.include_router(logs_admin.router)
 admin_router_aggregate.include_router(payments.router)
 admin_router_aggregate.include_router(user_migration.router)
+admin_router_aggregate.include_router(test_b2p.router)
 
 __all__ = ("admin_router_aggregate", )

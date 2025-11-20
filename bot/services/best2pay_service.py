@@ -26,7 +26,7 @@ class Best2PayService:
         self.sector_id = settings.BEST2PAY_SECTOR_ID
         self.sector_uuid = settings.BEST2PAY_SECTOR_UUID  # UUID для API запросов
         self.password = settings.BEST2PAY_PASSWORD
-        self.api_url = "https://pay.best2pay.net/webapi/"
+        self.api_url = settings.BEST2PAY_API_URL
 
         # Используем числовой ID для API запросов (UUID не принимается)
         self.sector_for_api = self.sector_id
@@ -43,6 +43,7 @@ class Best2PayService:
                 f"Best2Pay service configured:\n"
                 f"  Sector ID: {self.sector_id}\n"
                 f"  Sector UUID: {self.sector_uuid}\n"
+                f"  API URL: {self.api_url}\n"
                 f"  Using for API: {self.sector_for_api}"
             )
 
@@ -50,10 +51,15 @@ class Best2PayService:
         """
         Generate SHA256 + Base64 signature for Best2Pay requests
 
-        Algorithm:
+        Algorithm (from Best2Pay documentation):
         1. Concatenate parameters + password
         2. Calculate SHA256 hash (hexadecimal lowercase)
         3. Encode hex string to Base64
+
+        Example from docs:
+        str = "1100643test"
+        sha256 = "f665bf26a3d24e00b5646c829ea07cef67ed7a2af5eb1fbc258720c651136fee"
+        signature = "ZjY2NWJmMjZhM2QyNGUwMGI1NjQ2YzgyOWVhMDdjZWY2N2VkN2EyYWY1ZWIxZmJjMjU4NzIwYzY1MTEzNmZlZQ=="
 
         Args:
             data: String to sign (format varies by operation)
@@ -64,7 +70,7 @@ class Best2PayService:
         # Concatenate data with password
         signature_string = f"{data}{self.password}"
 
-        # Calculate SHA256 hash (UTF-8 encoding)
+        # Calculate SHA256 hash (UTF-8 encoding, lowercase hex)
         sha256_hash = hashlib.sha256(signature_string.encode('utf-8')).hexdigest().lower()
 
         # Encode hex string to Base64
@@ -214,11 +220,8 @@ class Best2PayService:
             signature_data = f"{self.sector_for_api}{order_id}"
             signature = self._generate_signature(signature_data)
 
-            # Choose payment method endpoint
-            if payment_method.lower() == "sbp":
-                endpoint = "PurchaseSBP"
-            else:
-                endpoint = "Purchase"
+            # Use universal Purchase endpoint (supports card + QR + SBP)
+            endpoint = "Purchase"
 
             # Build payment URL
             from urllib.parse import urlencode
@@ -278,6 +281,91 @@ class Best2PayService:
         except Exception as e:
             logging.error(f"Error verifying Best2Pay signature: {e}", exc_info=True)
             return False
+
+    async def trigger_test_case(
+        self,
+        order_id: str,
+        case_id: str = "150"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Trigger Best2Pay test case for simulating payments (test environment only)
+
+        Args:
+            order_id: Order ID from Register response
+            case_id: Test case ID (150=success, 151=fail)
+
+        Returns:
+            Dictionary with test case response or None if error
+        """
+        if not self.configured:
+            logging.error("Best2Pay service is not configured")
+            return None
+
+        try:
+            # Generate signature: sector + case_id + order_id + password
+            signature_data = f"{self.sector_for_api}{case_id}{order_id}"
+            signature = self._generate_signature(signature_data)
+
+            logging.info(
+                f"Best2Pay trigger test case:\n"
+                f"  sector: {self.sector_for_api}\n"
+                f"  case_id: {case_id}\n"
+                f"  order_id: {order_id}\n"
+                f"  signature: {signature[:30]}..."
+            )
+
+            # Build request payload
+            payload = {
+                "sector": self.sector_for_api,
+                "case_id": case_id,
+                "order_id": order_id,
+                "signature": signature,
+            }
+
+            async with ClientSession() as session:
+                # Test case endpoint is at root level, not under /webapi/
+                # Example: https://test.best2pay.net/test/SBPTestCase
+                base_url = self.api_url.replace('/webapi/', '/')
+                url = f"{base_url}test/SBPTestCase"
+
+                logging.info(f"Sending Best2Pay test case request to {url}")
+                logging.debug(f"Payload: {payload}")
+
+                async with session.post(url, data=payload) as response:
+                    if response.status == 200:
+                        # Best2Pay returns XML response
+                        xml_text = await response.text()
+                        logging.debug(f"Best2Pay test case response XML:\n{xml_text}")
+
+                        try:
+                            root = ET.fromstring(xml_text)
+                            qrc_id = root.findtext('qrc_id')
+                            message = root.findtext('message')
+
+                            logging.info(
+                                f"Triggered Best2Pay test case {case_id} "
+                                f"for order {order_id}: {message}"
+                            )
+
+                            return {
+                                "qrc_id": qrc_id,
+                                "message": message,
+                                "order_id": order_id,
+                                "case_id": case_id,
+                            }
+                        except ET.ParseError as e:
+                            logging.error(f"Failed to parse Best2Pay test case XML response: {e}")
+                            logging.debug(f"XML content: {xml_text}")
+                            return None
+                    else:
+                        logging.error(
+                            f"Best2Pay test case failed with status {response.status}"
+                        )
+                        return None
+
+        except Exception as e:
+            logging.error(f"Error triggering Best2Pay test case: {e}", exc_info=True)
+            return None
 
     async def close(self):
         """Cleanup resources"""

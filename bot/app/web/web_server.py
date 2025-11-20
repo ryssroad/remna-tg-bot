@@ -43,7 +43,7 @@ async def build_and_start_web_app(
     telegram_uses_webhook_mode = bool(settings.WEBHOOK_BASE_URL)
 
     if telegram_uses_webhook_mode:
-        telegram_webhook_path = f"/202321/{settings.BOT_TOKEN}"
+        telegram_webhook_path = f"/{settings.BOT_TOKEN}"
         app.router.add_post(telegram_webhook_path, SimpleRequestHandler(dispatcher=dp, bot=bot))
         logging.info(
             f"Telegram webhook route configured at: [POST] {telegram_webhook_path} (relative to base URL)"

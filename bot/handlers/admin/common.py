@@ -121,6 +121,10 @@ async def admin_panel_actions_callback_handler(
             panel_service=panel_service,
             session=session)
         await callback.answer(_("admin_sync_initiated_from_panel"))
+    elif action == "test_b2p":
+        from . import test_b2p as admin_test_b2p_handlers
+        await admin_test_b2p_handlers.show_test_b2p_menu(
+            callback, state, settings)
     elif action == "queue_status":
         await show_queue_status_handler(callback, i18n_data)
     elif action == "view_payments":

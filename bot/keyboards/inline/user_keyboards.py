@@ -18,21 +18,21 @@ def get_main_menu_inline_keyboard(
             InlineKeyboardButton(text=_(key="menu_activate_trial_button"),
                                  callback_data="main_action:request_trial"))
 
-    # Personal cabinet button - generates one-time auth link
-    builder.row(
-        InlineKeyboardButton(
-            text=_(key="menu_personal_cabinet_button"),
-            callback_data="main_action:personal_cabinet",
-        )
-    )
-
-    # Hidden: all subscription info now in personal cabinet
+    # Personal cabinet button - generates one-time auth link (disabled for direct payments)
     # builder.row(
     #     InlineKeyboardButton(
-    #         text=_(key="menu_my_subscription_inline"),
-    #         callback_data="main_action:my_subscription",
+    #         text=_(key="menu_personal_cabinet_button"),
+    #         callback_data="main_action:personal_cabinet",
     #     )
     # )
+
+    # Subscribe button - enabled for direct payment flow
+    builder.row(
+        InlineKeyboardButton(
+            text=_(key="menu_subscribe_inline"),
+            callback_data="main_action:subscribe",
+        )
+    )
 
     referral_button = InlineKeyboardButton(
         text=_(key="menu_referral_inline"),
