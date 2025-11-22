@@ -516,8 +516,9 @@ async def pay_best2pay_callback_handler(
         reference=str(db_payment_record.payment_id),
         currency="RUB",
         description=payment_description,
-        url=settings.best2pay_success_webhook_url if hasattr(settings, 'best2pay_success_webhook_url') else None,
-        fail_url=settings.best2pay_fail_webhook_url if hasattr(settings, 'best2pay_fail_webhook_url') else None,
+        # Don't pass url/fail_url to show Best2Pay's standard receipt form with email input
+        # url=settings.best2pay_success_full_webhook_url,
+        # fail_url=settings.best2pay_fail_full_webhook_url,
     )
 
     if not register_result or not register_result.get("order_id"):

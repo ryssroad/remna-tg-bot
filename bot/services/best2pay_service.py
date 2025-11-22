@@ -687,7 +687,8 @@ async def best2pay_success_webhook(request: web.Request):
     return web.Response(
         status=200,
         text="✅ Оплата успешно завершена! Вы можете закрыть эту страницу и вернуться в бот.",
-        content_type="text/html; charset=utf-8"
+        content_type="text/html",
+        charset="utf-8"
     )
 
 
@@ -700,5 +701,6 @@ async def best2pay_fail_webhook(request: web.Request):
     return web.Response(
         status=200,
         text="❌ Оплата не удалась. Пожалуйста, попробуйте снова или обратитесь в поддержку.",
-        content_type="text/html; charset=utf-8"
+        content_type="text/html",
+        charset="utf-8"
     )

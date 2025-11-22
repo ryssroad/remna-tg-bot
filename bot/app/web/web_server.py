@@ -110,13 +110,13 @@ async def build_and_start_web_app(
 
     best2pay_success_path = settings.best2pay_success_webhook_path
     if best2pay_success_path.startswith("/"):
-        app.router.add_post(best2pay_success_path, best2pay_success_webhook)
-        logging.info(f"Best2Pay success webhook route configured at: [POST] {best2pay_success_path}")
+        app.router.add_get(best2pay_success_path, best2pay_success_webhook)
+        logging.info(f"Best2Pay success webhook route configured at: [GET] {best2pay_success_path}")
 
     best2pay_fail_path = settings.best2pay_fail_webhook_path
     if best2pay_fail_path.startswith("/"):
-        app.router.add_post(best2pay_fail_path, best2pay_fail_webhook)
-        logging.info(f"Best2Pay fail webhook route configured at: [POST] {best2pay_fail_path}")
+        app.router.add_get(best2pay_fail_path, best2pay_fail_webhook)
+        logging.info(f"Best2Pay fail webhook route configured at: [GET] {best2pay_fail_path}")
 
     # NOWPayments IPN webhook
     nowpayments_path = settings.nowpayments_ipn_webhook_path
